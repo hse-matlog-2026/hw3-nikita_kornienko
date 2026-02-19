@@ -59,9 +59,7 @@ def is_binary(string: str) -> bool:
     Returns:
         ``True`` if the given string is a binary operator, ``False`` otherwise.
     """
-    return string == '&' or string == '|' or string == '->'
-    # For Chapter 3:
-    # return string in {'&', '|',  '->', '+', '<->', '-&', '-|'}
+    return string in {'&', '|',  '->', '+', '<->', '-&', '-|'}
 
 @frozen
 class Formula:
@@ -196,11 +194,10 @@ class Formula:
         """
         if len(string) == 0:
             return None, 'Unexpected end of input'
-
         if is_constant(string[0]):
             return Formula(string[0]), string[1:]
 
-        if string[0] >= 'p' and string[0] <= 'z':
+        if 'p' <= string[0] <= 'z':
             index = 1
             while index < len(string) and string[index].isdecimal():
                 index += 1
@@ -218,20 +215,20 @@ class Formula:
             first, remainder = Formula._parse_prefix(string[1:])
             if first is None:
                 return None, remainder
+
             if remainder == '':
                 return None, 'Expected binary operator'
 
             operator = None
-            max_op_length = min(3, len(remainder))
-            for length in range(max_op_length, 0, -1):
-                candidate = remainder[:length]
-                if is_binary(candidate):
-                    operator = candidate
-                    remainder = remainder[length:]
+
+            for op in ['<->', '->', '-&', '-|', '&', '|', '+']:
+                if remainder.startswith(op):
+                    operator = op
+                    remainder = remainder[len(op):]
                     break
+
             if operator is None:
                 return None, 'Expected binary operator'
-
             second, remainder = Formula._parse_prefix(remainder)
             if second is None:
                 return None, remainder
@@ -360,6 +357,24 @@ class Formula:
         for variable in substitution_map:
             assert is_variable(variable)
         # Task 3.3
+        if is_variable(self.root):
+            if self.root in substitution_map:
+                return substitution_map[self.root]
+            return self
+
+        if is_constant(self.root):
+            return self
+
+        if is_unary(self.root):
+            return Formula(self.root,
+                           self.first.substitute_variables(substitution_map))
+
+        if is_binary(self.root):
+            return Formula(self.root,
+                           self.first.substitute_variables(substitution_map),
+                           self.second.substitute_variables(substitution_map))
+
+        # Task 3.3
 
     def substitute_operators(self, substitution_map: Mapping[str, Formula]) -> \
             Formula:
@@ -386,7 +401,33 @@ class Formula:
             ~(~~(~x|~y)|~~z)
         """
         for operator in substitution_map:
-            assert is_constant(operator) or is_unary(operator) or \
-                   is_binary(operator)
+            assert is_constant(operator) or is_unary(operator) or is_binary(operator)
             assert substitution_map[operator].variables().issubset({'p', 'q'})
+        if is_variable(self.root):
+            return self
+        if self.root in substitution_map:
+            template = substitution_map[self.root]
+
+            if is_constant(self.root):
+                return template
+
+            if is_unary(self.root):
+                operand = self.first.substitute_operators(substitution_map)
+                return template.substitute_variables({'p': operand})
+
+            if is_binary(self.root):
+                left = self.first.substitute_operators(substitution_map)
+                right = self.second.substitute_operators(substitution_map)
+                return template.substitute_variables({'p': left, 'q': right})
+        if is_constant(self.root):
+            return self
+
+        if is_unary(self.root):
+            return Formula(self.root,
+                           self.first.substitute_operators(substitution_map))
+
+        if is_binary(self.root):
+            return Formula(self.root,
+                           self.first.substitute_operators(substitution_map),
+                           self.second.substitute_operators(substitution_map))
         # Task 3.4
